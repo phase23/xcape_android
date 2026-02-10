@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "499980658404",
-    "project_id": "xcape-cb69d",
-    "storage_bucket": "xcape-cb69d.appspot.com"
+    "project_number": "539950265565",
+    "project_id": "xcape-61999",
+    "storage_bucket": "xcape-61999.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:499980658404:android:1634c2e9baf6887745eef1",
+        "mobilesdk_app_id": "1:539950265565:android:33d0cfbf6196481dba1734",
         "android_client_info": {
           "package_name": "com.plus.navanguilla"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCWqAD5qStxMF1T5QQt4oP6dL8KXMLJtEA"
+          "current_key": "AIzaSyDZ-ey6lj2PziBpdNfh8gphX0dQBhWqN9c"
         }
       ],
       "services": {

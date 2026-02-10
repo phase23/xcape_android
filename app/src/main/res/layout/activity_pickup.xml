@@ -63,4 +63,19 @@
 
 
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/recenterBtn"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="32dp"
+        android:background="@drawable/hamburger_menu_bg"
+        android:elevation="6dp"
+        android:padding="10dp"
+        android:src="@drawable/ic_recenter"
+        android:contentDescription="Re-center map"
+        android:visibility="gone" />
+
 </fragment>

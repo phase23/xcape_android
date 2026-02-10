@@ -28,6 +28,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -112,6 +113,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
     Button startroutex;
     String itemid;
     String placeid;
+    String placename;
     private boolean isTTSInitialized = false;
     private TextToSpeech tts;
     private static final float BEARING_TOLERANCE = 20;
@@ -119,6 +121,11 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
     Boolean playedalready = false;
     String cid;
     String thiscountry;
+    private boolean isFollowingUser = true;
+    private ImageView recenterBtn;
+    private double lastLat;
+    private double lastLon;
+    private float lastBearing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,6 +170,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
 
         theroute = getIntent().getExtras().getString("theroute");
         placeid = getIntent().getExtras().getString("placeid");
+        placename = getIntent().getExtras().getString("placename", "");
         // String theroute = getroute(cunq, thisorderid);
 
         getback = (Button)findViewById(R.id.dialcustomer);
@@ -254,7 +262,11 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
                     public void onClick(DialogInterface dialog, int which) {
                         String tag = (String) view.getTag();
                         Intent intent;
-                        if(prec.equals("1")){
+                        if(prec.equals("3")){
+                            intent   = new Intent(getApplicationContext(), LoadCalendar.class);
+                        }else if(prec.equals("2")){
+                            intent   = new Intent(getApplicationContext(), LoadHistoricalSites.class);
+                        }else if(prec.equals("1")){
                             intent   = new Intent(getApplicationContext(), Loadevents.class);
                         }else {
                              intent = new Intent(getApplicationContext(), Loaditems.class);
@@ -285,6 +297,23 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
 
         tts = new TextToSpeech(this, this);
 
+        recenterBtn = (ImageView) findViewById(R.id.recenterBtn);
+        recenterBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                isFollowingUser = true;
+                recenterBtn.setVisibility(View.GONE);
+                if (mMap != null) {
+                    CameraPosition position = CameraPosition.builder()
+                            .bearing(lastBearing)
+                            .target(new LatLng(lastLat, lastLon))
+                            .zoom(mMap.getCameraPosition().zoom)
+                            .tilt(30.0f)
+                            .build();
+                    mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+                }
+            }
+        });
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
@@ -299,7 +328,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
             // Optionally set language, pitch, etc.
             float speechRate = 0.7f; // 50% of the normal speech rate
             //tts.setSpeechRate(speechRate);
-            String thislocation = getendlocation(placeid);
+            String thislocation = (placename != null && !placename.isEmpty()) ? placename : getendlocation(placeid);
             tts.speak("Proceed to the route, please remember to keep left, navigating to " + thislocation, TextToSpeech.QUEUE_FLUSH, null, null);
         } else {
             // Initialization failed
@@ -351,7 +380,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
         String sendroute = mylat +"," + mylon + ","+ dmylat + ","+dmylon;
 
         try {
-            sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+sendroute);
+            sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+sendroute);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -447,15 +476,26 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
                 .tilt(30.0f)
                 .build();
 
+        // One-time zoom-in: animate to 18 then remove the listener
         mMap.setOnCameraIdleListener(new GoogleMap.OnCameraIdleListener() {
             @Override
             public void onCameraIdle() {
                 float currentZoom = mMap.getCameraPosition().zoom;
-                if (currentZoom != 18.0f) {
-                    // The zoom level is not what we expected, try zooming again
+                if (currentZoom < 18.0f) {
                     mMap.animateCamera(CameraUpdateFactory.zoomTo(18.0f));
+                } else {
+                    mMap.setOnCameraIdleListener(null);
                 }
-                // Else, the zoom level is as expected
+            }
+        });
+
+        mMap.setOnCameraMoveStartedListener(new GoogleMap.OnCameraMoveStartedListener() {
+            @Override
+            public void onCameraMoveStarted(int reason) {
+                if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                    isFollowingUser = false;
+                    recenterBtn.setVisibility(View.VISIBLE);
+                }
             }
         });
 
@@ -472,7 +512,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
         cid = shared.getString("cid", "");
         thiscountry = shared.getString("country", "");
 
-        String url = "https://xcape.ai/navigation/loadwaymarkers.php?type=general&cid="+cid;
+        String url = justhelper.BASE_URL + "/navigation/loadwaymarkers.php?type=general&cid="+cid;
         Log.i("action url",url);
         OkHttpClient client = new OkHttpClient();
         RequestBody requestBody = new MultipartBody.Builder()
@@ -510,7 +550,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
         String thisdevice = Settings.Secure.getString(this.getContentResolver(),
                 Settings.Secure.ANDROID_ID);
 
-        String url = "https://xcape.ai/navigation/getendlocation.php?id=" + itemid;
+        String url = justhelper.BASE_URL + "/navigation/getendlocation.php?id=" + itemid;
         Log.i("action url",url);
         OkHttpClient client = new OkHttpClient();
         RequestBody requestBody = new MultipartBody.Builder()
@@ -542,7 +582,40 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
 
     }
 
+    private void recordVisit(String placeId, String placeName, double lat, double lng) {
+        String deviceId = Settings.Secure.getString(this.getContentResolver(),
+                Settings.Secure.ANDROID_ID);
 
+        String url = justhelper.BASE_URL + "/navigation/record_visit.php";
+
+        OkHttpClient client = new OkHttpClient();
+        RequestBody requestBody = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("device_id", deviceId)
+                .addFormDataPart("place_id", placeId)
+                .addFormDataPart("place_name", placeName)
+                .addFormDataPart("lat", String.valueOf(lat))
+                .addFormDataPart("lng", String.valueOf(lng))
+                .build();
+
+        Request request = new Request.Builder()
+                .url(url)
+                .post(requestBody)
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.e("RecordVisit", "Failed to record visit", e);
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                Log.i("RecordVisit", "Visit recorded: " + response.body().string());
+                response.close();
+            }
+        });
+    }
 
 
 
@@ -768,8 +841,9 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
             if(isClose) {
                 // You are within 20 meters of the destination
                 if(!playedalready){
-                    String endlocation = getendlocation(placeid);
+                    String endlocation = (placename != null && !placename.isEmpty()) ? placename : getendlocation(placeid);
                     speak("You have arrived at you destination. " +endlocation);
+                    recordVisit(placeid, endlocation, mydoublelat, mydoublelon);
                  playedalready = true;
                 }
             } else {
@@ -781,21 +855,29 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
             LatLng currentlocation = new LatLng(mydoublelat, mydoublelon);
             checkProximityToWaypoints(currentlocation, thebearing,waypoints);
 
-            CameraPosition position = CameraPosition.builder()
-                    .bearing(thebearing)
-                    .target(new LatLng(mydoublelat, mydoublelon))
-                    .zoom(mMap.getCameraPosition().zoom)
-                    .tilt(30.0f)
-                    .build();
+            // Always store latest position for re-center
+            lastLat = mydoublelat;
+            lastLon = mydoublelon;
+            lastBearing = thebearing;
 
-            //mMap.clear();
+            // Always update the driver marker
             drivermaker.remove();
             MarkerOptions mp = new MarkerOptions();
             mp.position(new LatLng(mydoublelat, mydoublelon));
             mp.title("my position");
             mp.icon(BitmapDescriptorFactory.fromResource(R.drawable.mapmarker));
             drivermaker = mMap.addMarker(mp);
-            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+
+            // Only move camera when following user
+            if (isFollowingUser) {
+                CameraPosition position = CameraPosition.builder()
+                        .bearing(thebearing)
+                        .target(new LatLng(mydoublelat, mydoublelon))
+                        .zoom(mMap.getCameraPosition().zoom)
+                        .tilt(30.0f)
+                        .build();
+                mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+            }
 
 
             String nextroute = mydoublelat + "," + mydoublelon + "," + dmylat + "," + dmylon ;
@@ -806,7 +888,7 @@ public class Pickup extends FragmentActivity implements OnMapReadyCallback,Googl
 
 
             try {
-                sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+nextroute);
+                sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+nextroute);
 
             } catch (IOException e) {
                 e.printStackTrace();

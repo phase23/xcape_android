@@ -32,7 +32,7 @@ public class Disclosure extends AppCompatActivity {
         nothanks.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(Disclosure.this, Myactivity.class);
+                Intent intent = new Intent(Disclosure.this, SelectCountry.class);
                 startActivity(intent);
 
             }

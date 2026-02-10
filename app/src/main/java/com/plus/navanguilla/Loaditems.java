@@ -1,39 +1,45 @@
 package com.plus.navanguilla;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import android.app.AlertDialog;
-import android.content.DialogInterface;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Color;
+import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
-import com.squareup.picasso.Picasso;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+import android.provider.Settings;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -41,21 +47,21 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class Loaditems extends AppCompatActivity {
-    String getload;
-    Handler handler2;
-    String returnshift;
-    String someitems;
-    Button goback;
-    String locationnow;
-    String itemid;
-    String placeId;
-    String thistag;
-    TextView loading;
-    ProgressBar progressBar;
-    String cid;
-    String thiscountry;
-    String isinterest;
+public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenueClickListener {
+
+    private Handler handler;
+    private String locationnow;
+    private String itemid;
+    private String thistag;
+    private TextView loading;
+    private ProgressBar progressBar;
+    private View loadingContainer;
+    private String cid;
+    private boolean sortByDistance = true;
+    private boolean filterLocal = false;
+
+    private RecyclerView recyclerView;
+    private VenueAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,97 +71,185 @@ public class Loaditems extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        // Hide the status bar.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-
-        // Hide the navigation bar.
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
 
-        justhelper.setBrightness(this, 75); // Sets brightness to 75%
+        justhelper.setBrightness(this, 75);
 
         setContentView(R.layout.activity_loaditems);
-        handler2 = new Handler(Looper.getMainLooper());
+        handler = new Handler(Looper.getMainLooper());
 
-
-        final LinearLayout layout = findViewById(R.id.scnf);
-        goback = (Button)findViewById(R.id.backmain);
-        loading = (TextView) findViewById(R.id.loadingtext);
+        Button goback = findViewById(R.id.backmain);
+        loading = findViewById(R.id.loadingtext);
+        progressBar = findViewById(R.id.spin_kit);
+        loadingContainer = findViewById(R.id.loading_container);
 
         SharedPreferences shared = getSharedPreferences("autoLogin", MODE_PRIVATE);
-        SharedPreferences.Editor prefsEditor = shared.edit();
-
         cid = shared.getString("cid", "");
-        thiscountry = shared.getString("country", "");
 
-
-        goback.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Loaditems.this, Myactivity.class);
-                startActivity(intent);
-
-            }
+        goback.setOnClickListener(v -> {
+            Intent intent = new Intent(Loaditems.this, Myactivity.class);
+            startActivity(intent);
         });
 
+        itemid = getIntent().getExtras().getString("list", "defaultKey");
+        Log.i("side", itemid);
 
-        itemid = getIntent().getExtras().getString("list","defaultKey");
-        Log.i("side",itemid);
+        // Set up RecyclerView
+        recyclerView = findViewById(R.id.venue_list);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        float density = getResources().getDisplayMetrics().density;
+        int sideMargin = (int) (16 * density);
+        int topPadding = (int) (20 * density);
+        recyclerView.setPadding(sideMargin, topPadding, sideMargin, 0);
+        adapter = new VenueAdapter(itemid, this);
+        recyclerView.setAdapter(adapter);
 
-        if(itemid.equals("2") || itemid.equals("1") || itemid.equals("3") || itemid.equals("7") || itemid.equals("5") || itemid.equals("4") || itemid.equals("10") || itemid.equals("11")   ) {
+        // Search bar for restaurants and accommodations
+        EditText searchBar = findViewById(R.id.search_bar);
+        if (itemid.equals("2") || itemid.equals("6")) {
+            searchBar.setVisibility(View.VISIBLE);
+            searchBar.setHint(itemid.equals("2") ? "Search restaurants..." : "Search accommodations...");
+            searchBar.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    adapter.filter(s.toString());
+                }
+                @Override
+                public void afterTextChanged(Editable s) {}
+            });
+        }
+
+        // Sort toggle for restaurants only
+        Button sortButton = findViewById(R.id.sort_button);
+        Button localFilterButton = findViewById(R.id.local_filter_button);
+        if (itemid.equals("2")) {
+            sortButton.setVisibility(View.VISIBLE);
+            localFilterButton.setVisibility(View.VISIBLE);
+            sortButton.setText("Sort List A - Z");
+            sortButton.setOnClickListener(v -> {
+                sortByDistance = !sortByDistance;
+                if (sortByDistance) {
+                    sortButton.setText("Sort List A - Z");
+                    loadlist("distance");
+                    loading.setText("Sorting by distance .. loading");
+                } else {
+                    sortButton.setText("Sort by Distance");
+                    loadlist("venue");
+                    loading.setText("Sorting A to Z .. loading");
+                }
+                searchBar.setText("");
+            });
+
+            localFilterButton.setOnClickListener(v -> {
+                filterLocal = !filterLocal;
+                adapter.setLocalOnly(filterLocal);
+                if (filterLocal) {
+                    localFilterButton.setText("Show All");
+                    localFilterButton.setTextColor(0xFFFFFFFF);
+                    localFilterButton.setBackgroundResource(R.drawable.local_filter_button_active_background);
+                } else {
+                    localFilterButton.setText("Show Local");
+                    localFilterButton.setTextColor(0xFF2E7D32);
+                    localFilterButton.setBackgroundResource(R.drawable.local_filter_button_background);
+                }
+            });
+        }
+
+        // Badge counter for badges list
+        if (itemid.equals("12")) {
+            loadBadgeCount();
+        }
+
+        // Initial load
+        if (itemid.equals("2") || itemid.equals("1") || itemid.equals("3") ||
+                itemid.equals("7") || itemid.equals("5") || itemid.equals("4") ||
+                itemid.equals("10") || itemid.equals("11") || itemid.equals("12")) {
             loadlist("distance");
             loading.setText("Sorting by distance .. loading");
-        }else{
+        } else {
+            sortByDistance = false;
             loadlist("venue");
             loading.setText("Sorting A to Z .. loading");
         }
+    }
 
+    private void loadBadgeCount() {
+        String thisdevice = Settings.Secure.getString(this.getContentResolver(),
+                Settings.Secure.ANDROID_ID);
+        String url = justhelper.BASE_URL + "/navigation/get_user_badges.php?device_id=" + thisdevice + "&cid=" + cid;
 
-        if(  itemid.equals("2")  ) {
-            restaurantbutton();
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder().url(url).build();
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.i("badge", "Failed to fetch badge count");
+            }
 
-        }
-
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String body = response.body().string();
+                try {
+                    JSONObject json = new JSONObject(body);
+                    int collected = json.optInt("collected_count", 0) + 1;
+                    int total = json.optInt("total_badges", 0) + 1;
+                    if (total > 1) {
+                        runOnUiThread(() -> {
+                            LinearLayout badgeCounter = findViewById(R.id.badge_counter);
+                            TextView badgeCountText = findViewById(R.id.badge_count_text);
+                            ImageView badgeCountIcon = findViewById(R.id.badge_count_icon);
+                            if (collected >= total) {
+                                badgeCountText.setText("Island Warrior!");
+                                badgeCountText.setTextColor(android.graphics.Color.WHITE);
+                                badgeCountIcon.setImageResource(R.drawable.warrior_star);
+                                badgeCounter.setBackground(androidx.core.content.ContextCompat.getDrawable(
+                                        Loaditems.this, R.drawable.badge_counter_complete_bg));
+                            } else {
+                                badgeCountText.setText(collected + " of " + total);
+                            }
+                            badgeCounter.setVisibility(View.VISIBLE);
+                        });
+                    }
+                } catch (Exception e) {
+                    Log.i("badge", "Error parsing badge count: " + e.getMessage());
+                }
+            }
+        });
     }
 
     @Override
     public void onBackPressed() {
-
+        Intent intent = new Intent(Loaditems.this, Myactivity.class);
+        startActivity(intent);
     }
 
-    public void loadlist(String sortorder){
-        loading.setVisibility(View.VISIBLE);
-        progressBar = findViewById(R.id.spin_kit);
-        LinearLayout linearLayout = findViewById(R.id.scnf);
-
-        /*
-        for (int i = 1; i <= 950; i++) {
-            View viewToRemove = linearLayout.findViewWithTag(String.valueOf(i));
-            if (viewToRemove != null) {
-                linearLayout.removeView(viewToRemove);
-            }
-        }
-         */
-        // Remove all dynamically added container views
-        for (int i = 0; i <= 950; i++) {
-            View containerToRemove = linearLayout.findViewWithTag("container_" + i); // Use consistent tagging
-            if (containerToRemove != null) {
-                linearLayout.removeView(containerToRemove);
-            }
-        }
-
-
-
+    public void loadlist(String sortorder) {
+        loadingContainer.setVisibility(View.VISIBLE);
+        adapter.setVenues(Collections.emptyList());
 
         try {
             String getlocation = readFile();
-            doLoadlist("https://xcape.ai/navigation/loadlist.php?id="+itemid + "&location="+getlocation + "&sortorder=" +sortorder + "&cid=" +cid);
-
+            String url;
+            if (itemid.equals("12")) {
+                url = justhelper.BASE_URL + "/navigation/load_badge_list.php?location=" + getlocation
+                        + "&sortorder=" + sortorder
+                        + "&cid=" + cid;
+            } else {
+                url = justhelper.BASE_URL + "/navigation/loadlist.php?id=" + itemid
+                        + "&location=" + getlocation
+                        + "&sortorder=" + sortorder
+                        + "&cid=" + cid;
+            }
+            doLoadlist(url);
         } catch (IOException e) {
             e.printStackTrace();
+            loadingContainer.setVisibility(View.GONE);
+            Toast.makeText(this, "Failed to load", Toast.LENGTH_SHORT).show();
         }
-    }//end list
+    }
 
     public String readFile() {
         String fileName = "navi.txt";
@@ -176,921 +270,242 @@ public class Loaditems extends AppCompatActivity {
             }
 
             locationnow = stringBuilder.toString();
-            // Use the file contents as needed
-            // Uncomment the line below to display a toast message with the content
-            // Toast.makeText(getApplicationContext(), "Serlat: " + locationnow, Toast.LENGTH_LONG).show();
         } catch (IOException e) {
             e.printStackTrace();
-            // Error reading file
         } finally {
             if (br != null) {
-                try {
-                    br.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { br.close(); } catch (IOException e) { e.printStackTrace(); }
             }
             if (isr != null) {
-                try {
-                    isr.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { isr.close(); } catch (IOException e) { e.printStackTrace(); }
             }
             if (fis != null) {
-                try {
-                    fis.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { fis.close(); } catch (IOException e) { e.printStackTrace(); }
             }
         }
 
-        return  locationnow;
+        return locationnow;
     }
-
-
 
     void doLoadlist(String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
-        Log.i("ddevice",url);
+        Log.i("ddevice", url);
         OkHttpClient client = new OkHttpClient();
         client.newCall(request)
                 .enqueue(new Callback() {
                     @Override
                     public void onFailure(final Call call, IOException e) {
-                        Log.i("ddevice","errot " + e); // Error
-
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // For the example, you can show an error dialog or a toast
-                                // on the main UI thread
-                            }
+                        Log.i("ddevice", "error " + e);
+                        runOnUiThread(() -> {
+                            loadingContainer.setVisibility(View.GONE);
+                            Toast.makeText(Loaditems.this, "Failed to load venues", Toast.LENGTH_SHORT).show();
                         });
                     }
 
                     @Override
                     public void onResponse(Call call, final Response response) throws IOException {
+                        final String json = response.body().string();
+                        Log.i("ddevice", json);
 
-
-                        someitems = response.body().string();
-                        Log.i("ddevice",someitems);
-
-                        handler2.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if(itemid.equals("1")) {
-                                    //fbeachbutton();
-
-
-                                }else if(itemid.equals("4")){
-                                    //callofficebutton();
-                                  //  callpolicebutton();
-                                }
-
-
-
-
-                                othernav(someitems);
-                                loading.setVisibility(View.INVISIBLE);
-                                progressBar.setVisibility(View.GONE);
-                            }
+                        handler.post(() -> {
+                            parseAndDisplay(json);
+                            loadingContainer.setVisibility(View.GONE);
                         });
-
-
-                    }//end if
-
-
-
-
+                    }
                 });
-
     }
 
-
-    public String toSentenceCase(String inputString) {
-        if (inputString == null || inputString.isEmpty()) {
-            return inputString;
-        }
-
-        return inputString.substring(0, 1).toUpperCase() + inputString.substring(1).toLowerCase();
-    }
-
-
-
-
-    /*
-    public void othernav(String json) {
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-
-
+    private void parseAndDisplay(String json) {
+        List<Venue> venues = new ArrayList<>();
         try {
             JSONArray jsonArray = new JSONArray(json);
-
             for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject jsonObject = jsonArray.getJSONObject(i);
-
-                // Extracting data from JSON object
-                placeId = jsonObject.getString("placeid");
-                String whichSite = jsonObject.getString("whichsite").trim();
-                String phone = jsonObject.getString("phone").trim();
-                double distance = jsonObject.getDouble("distance");
-                String thisplace = jsonObject.getString("thisplace");
-                 isinterest = jsonObject.getString("isinterest");
-                String isAdvertiser = jsonObject.optString("isAdvertiser", "0"); // Default to "0" if not present
-                String openingTimes = jsonObject.optString("openingTimes", "N/A");
-                String about = jsonObject.optString("slug", "No details available");
-                String imageUrl = jsonObject.optString("imageUrl", "");
-
-
-                String formattedDistance = String.format("%.2f", distance);
-                String buttonText;
-                String onwhichSite = toSentenceCase(whichSite);
-                Log.i("wsite",whichSite);
-
-                if(whichSite.equals("Monday")){
-                    buttonText = whichSite + " ";
-                } else {
-                    // Creating button text
-                    buttonText = onwhichSite + "\n" + formattedDistance + " Miles";
-                }
-                // Create a button
-                Button button = new Button(this);
-                button.setTag(placeId);  // Set placeId as tag
-                button.setTag(R.id.tag_first, phone);
-                button.setTag(R.id.tag_second, thisplace);
-                button.setTag(R.id.tag_next, isinterest);
-                button.setText(buttonText);
-                //button.setTransformationMethod(null);
-                //button.setAllCaps(false);
-                // Add an OnClickListener to handle button clicks
-                button.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-
-                        String thistagnext = (String) button.getTag(R.id.tag_next);
-
-                        AlertDialog.Builder dialog = new AlertDialog.Builder(Loaditems.this);
-                        dialog.setCancelable(false);
-                            String thisaction;
-                            String thiscancel;
-                        if(itemid.equals("2") || thistagnext.equals("1")){
-                            String msgtop;
-                            String msgbtm;
-                            if(thistagnext.equals("1")){
-                                msgtop = "Book Activity or start navigation";
-                                msgbtm = "Book Activity";
-                            }else{
-                                 msgtop = "Reserve a table or start navigation";
-                                msgbtm = "Reserve table";
-                            }
-                            String thisplace = (String) button.getTag(R.id.tag_second);
-                            dialog.setTitle(thisplace);
-                            dialog.setMessage(msgtop);
-                            thisaction = "Start";
-                            thiscancel = "Cancel";
-
-                            dialog.setNeutralButton(msgbtm, new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    // Code to execute on "Info"
-                                    String thisphone = (String) button.getTag(R.id.tag_first);
-                                    //Toast.makeText(getApplicationContext(), "phone " + thisphone, Toast.LENGTH_SHORT).show();
-
-                                    Uri number = Uri.parse("tel:" +thisphone);
-                                    Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
-                                    startActivity(callIntent);
-
-                                }
-                            });
-
-
-
-
-                        }else {
-                            dialog.setTitle("Start Navigation");
-                            dialog.setMessage("Are you sure you want start this route?");
-                            thisaction = "Yes";
-                            thiscancel = "No";
-
-                        }
-
-
-                        dialog.setPositiveButton(thisaction, new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int id) {
-
-                                thistag = (String) button.getTag();
-                                gettheroutes(thistag);
-
-
-                                dialog.dismiss();
-                            }
-                        })
-                                .setNegativeButton(thiscancel, new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        //Action for "Cancel".
-                                        dialog.dismiss();
-                                    }
-                                });
-
-
-
-
-                        final AlertDialog alert = dialog.create();
-                        alert.show();
-
-
-                    }
-                });
-
-                // Setting button height and other properties
-                LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                buttonParams.height = 80;  // adjust this value to your liking
-                button.setTextSize(14);  // adjust this value to your liking
-                int padding = 20;  // adjust this value to your liking
-                button.setPadding(padding, padding, padding, padding);
-                button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);  // This aligns the text to the left
-// Aligning text to the left and adding an image
-                button.setGravity(Gravity.START);  // This aligns the text to the left
-                Log.i("ddevice",itemid); // Error
-                int drawableLeft;
-                if (itemid.equals("1")){
-                    drawableLeft = R.drawable.beach;  // Replace with your drawable resource ID
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_beach));
-
-                }else if(itemid.equals("2")){
-
-                    drawableLeft = R.drawable.pineat;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-                }else if(itemid.equals("3")){
-
-                    if(isinterest.equals("1")) {
-                        drawableLeft = R.drawable.outdoor;
-                    }else{
-                        drawableLeft = R.drawable.mmpin;
-                    }
-
-
-
-
-                }else if(itemid.equals("4")){
-                    drawableLeft = R.drawable.hospitalabr;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-                }else if(itemid.equals("5")){
-                    drawableLeft = R.drawable.luggage;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-                }else if(itemid.equals("6")){
-                    drawableLeft = R.drawable.villa;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-
-                }else if(itemid.equals("10")){
-                    drawableLeft = R.drawable.retail;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-                }else if(itemid.equals("11")){
-                    drawableLeft = R.drawable.crental;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-
-                }else if(itemid.equals("7")){
-                    drawableLeft = R.drawable.petroloutline;
-                    button.setTextColor(Color.BLACK);
-                    button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-                }else{
-
-
-                    drawableLeft = R.drawable.pineat;
-
-                }
-                int drawableRight = R.drawable.chevron;
-
-
-                button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, drawableRight, 0);
-                button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-
-
-                LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                layoutParams.setMargins(margin, 0, margin, 30);
-                button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-                LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-                linearLayout.addView(button);
-
+                venues.add(Venue.fromJson(jsonArray.getJSONObject(i)));
             }
-        } catch (JSONException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            Toast.makeText(this, "Failed to parse venue data", Toast.LENGTH_SHORT).show();
         }
-
-
-
-
-
+        // Featured listings first, then by current sort order
+        Collections.sort(venues, (a, b) -> {
+            int aAd = a.isAdvertiser.equals("1") ? 0 : 1;
+            int bAd = b.isAdvertiser.equals("1") ? 0 : 1;
+            if (aAd != bAd) return aAd - bAd;
+            if (sortByDistance) {
+                return Double.compare(a.distance, b.distance);
+            } else {
+                return a.getDisplayName().compareToIgnoreCase(b.getDisplayName());
+            }
+        });
+        adapter.setVenues(venues);
     }
 
+    // --- VenueAdapter.OnVenueClickListener ---
 
-     */
+    @Override
+    public void onNavigateClick(Venue venue) {
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this);
+        dialog.setCancelable(false);
 
+        String thisaction;
+        String thiscancel;
 
-    public void othernav(String json) {
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 10% of screen width
+        if (itemid.equals("2") || venue.isInterest.equals("1")) {
+            String msgtop;
+            String msgbtm;
 
-        try {
-            JSONArray jsonArray = new JSONArray(json);
-
-            for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject jsonObject = jsonArray.getJSONObject(i);
-
-                // Extracting data from JSON object
-                placeId = jsonObject.getString("placeid");
-                String whichSite = jsonObject.getString("whichsite").trim();
-                String phone = jsonObject.getString("phone").trim();
-                double distance = jsonObject.getDouble("distance");
-                String thisplace = jsonObject.getString("thisplace");
-                String drivingtime = jsonObject.getString("drivingtime");
-                isinterest = jsonObject.getString("isinterest");
-                String isAdvertiser = jsonObject.optString("isAdvertiser", "0");
-                String openingTimes = jsonObject.optString("openingTimes", "N/A");
-                String openingTimesOthertxt = jsonObject.optString("openingTimesOther", "");
-                String about = jsonObject.optString("slug", "No details available");
-                String imageUrl = jsonObject.optString("imageUrl", "");
-
-                String formattedDistance = String.format("%.2f", distance);
-               // String buttonText = whichSite + "\n" + formattedDistance + " Miles";
-                String buttonText = drivingtime;
-                // Create a container layout for each item
-                LinearLayout container = new LinearLayout(this);
-                container.setOrientation(LinearLayout.VERTICAL);
-                container.setTag("container_" + i);
-                container.setPadding(20, 20, 20, 20);
-                container.setBackground(ContextCompat.getDrawable(this,
-                        isAdvertiser.equals("1") ? R.drawable.advertiser_background : R.drawable.default_background));
-                container.setLayoutParams(new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-                // Add ImageView for advertiser
-                if (isAdvertiser.equals("1")) {
-                    ImageView imageView = new ImageView(this);
-                    imageView.setLayoutParams(new LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT, 300)); // Adjust height as needed
-                    imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-                    if (!imageUrl.isEmpty()) {
-                        Picasso.get()
-                                .load(imageUrl)
-                                .placeholder(R.drawable.placeholder) // Placeholder image
-                                .error(R.drawable.placeholder) // Error image
-                                .into(imageView);
-                    } else {
-                        imageView.setImageResource(R.drawable.placeholder); // Default placeholder
-                    }
-
-                    container.addView(imageView);
-                }
-
-                // Add TextView for place details
-                TextView detailsText = new TextView(this);
-                detailsText.setText(thisplace + "\n" + formattedDistance + " Miles");
-                detailsText.setTextSize(16);
-                detailsText.setTextColor(Color.BLACK);
-                container.addView(detailsText);
-
-                // Add advertiser-specific details
-                if (isAdvertiser.equals("1")) {
-                    TextView openingTimesText = new TextView(this);
-                    openingTimesText.setText(  openingTimes);
-                    openingTimesText.setTextSize(14);
-                    openingTimesText.setTextColor(Color.GREEN);
-                    container.addView(openingTimesText);
-
-                    TextView openingTimesTextOther = new TextView(this);
-                    openingTimesTextOther.setText("" + openingTimesOthertxt);
-                    openingTimesTextOther.setTextSize(14);
-                    openingTimesTextOther.setTextColor(Color.GREEN);
-                    container.addView(openingTimesTextOther);
-
-                    TextView aboutText = new TextView(this);
-                    aboutText.setText("About: " + about);
-                    aboutText.setTextSize(14);
-                    aboutText.setTextColor(Color.DKGRAY);
-                    container.addView(aboutText);
-                }
-
-                // Add Button for actions
-                Button button = new Button(this);
-                button.setTag(placeId);  // Set placeId as tag
-                button.setTag(R.id.tag_first, phone);
-                button.setTag(R.id.tag_second, thisplace);
-                button.setTag(R.id.tag_next, isinterest);
-                button.setText(buttonText);
-                button.setTextColor(Color.BLACK);
-
-                // Add drawable for the button
-                int drawableLeft;
-                if (itemid.equals("1")) {
-                    drawableLeft = R.drawable.beach;
-                    //button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_beach));
-                } else if (itemid.equals("2")) {
-                    drawableLeft = R.drawable.pineat;
-                    //button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-                } else if (itemid.equals("3")) {
-                    drawableLeft = isinterest.equals("1") ? R.drawable.outdoor : R.drawable.mmpin;
-
-                }else if(itemid.equals("4")){
-                    drawableLeft = R.drawable.hospitalabr;
-                    button.setTextColor(Color.BLACK);
-                   // button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-                }else if(itemid.equals("5")){
-                    drawableLeft = R.drawable.luggage;
-                    button.setTextColor(Color.BLACK);
-                   // button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-                }else if(itemid.equals("6")){
-                    drawableLeft = R.drawable.villa;
-                    button.setTextColor(Color.BLACK);
-                   // button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-
-                }else if(itemid.equals("10")){
-                    drawableLeft = R.drawable.retail;
-                    button.setTextColor(Color.BLACK);
-                   // button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-                }else if(itemid.equals("11")){
-                    drawableLeft = R.drawable.crental;
-                    button.setTextColor(Color.BLACK);
-                    //button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_food));
-
-
-                } else {
-                    drawableLeft = R.drawable.pineat; // Default icon
-                }
-
-                // Add chevron drawable to the right of the button
-                button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, R.drawable.chevron, 0);
-                button.setCompoundDrawablePadding(10);
-
-                // Button click listener
-                button.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        String thistagnext = (String) button.getTag(R.id.tag_next);
-                        AlertDialog.Builder dialog = new AlertDialog.Builder(Loaditems.this);
-                        dialog.setCancelable(false);
-
-                        String thisaction;
-                        String thiscancel;
-
-                        if (itemid.equals("2") || thistagnext.equals("1")) {
-                            String msgtop;
-                            String msgbtm;
-
-                            if (thistagnext.equals("1")) {
-                                msgtop = "Book Activity or start navigation";
-                                msgbtm = "Book Activity";
-                            } else {
-                                msgtop = "Reserve a table or start navigation";
-                                msgbtm = "Reserve table";
-                            }
-
-                            String thisplace = (String) button.getTag(R.id.tag_second);
-                            dialog.setTitle(thisplace);
-                            dialog.setMessage(msgtop);
-                            thisaction = "Start";
-                            thiscancel = "Cancel";
-
-                            dialog.setNeutralButton(msgbtm, new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    String thisphone = (String) button.getTag(R.id.tag_first);
-                                    Uri number = Uri.parse("tel:" + thisphone);
-                                    Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
-                                    startActivity(callIntent);
-                                }
-                            });
-                        } else {
-                            dialog.setTitle("Start Navigation");
-                            dialog.setMessage("Are you sure you want to start this route?");
-                            thisaction = "Yes";
-                            thiscancel = "No";
-                        }
-
-                        dialog.setPositiveButton(thisaction, new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int id) {
-                                thistag = (String) button.getTag();
-                                gettheroutes(thistag);
-                                dialog.dismiss();
-                            }
-                        });
-
-                        dialog.setNegativeButton(thiscancel, new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                dialog.dismiss();
-                            }
-                        });
-
-                        final AlertDialog alert = dialog.create();
-                        alert.show();
-                    }
-                });
-
-                container.addView(button);
-
-                // Set margins for the container
-                LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                layoutParams.setMargins(margin, 0, margin, 30);
-                container.setLayoutParams(layoutParams);
-
-                // Add the container to the main layout
-                LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-                linearLayout.addView(container);
+            if (venue.isInterest.equals("1")) {
+                msgtop = "Book Activity or start navigation";
+                msgbtm = "Book Activity";
+            } else {
+                msgtop = "Reserve a table or start navigation";
+                msgbtm = "Reserve table";
             }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-    }
 
+            dialog.setTitle(venue.name);
+            dialog.setMessage(msgtop);
+            thisaction = "Start";
+            thiscancel = "Cancel";
 
-
-
-    private void callofficebutton(){
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-        /* Button  new start here */
-        Button button = new Button(this);
-        button.setTag("1");
-        button.setText("Call Office");
-
-        // Add an OnClickListener to handle button clicks
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Handle button click here
-                String  tag = (String) view.getTag();
-                // You can use the tag (index) to identify which button was clicked.
-
-                Uri number = Uri.parse("tel:4760608");
+            dialog.setNeutralButton(msgbtm, (d, which) -> {
+                Uri number = Uri.parse("tel:" + venue.phone);
                 Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
                 startActivity(callIntent);
+            });
+        } else {
+            dialog.setTitle("Start Navigation");
+            dialog.setMessage("Are you sure you want to start this route?");
+            thisaction = "Yes";
+            thiscancel = "No";
+        }
 
+        dialog.setPositiveButton(thisaction, (d, id) -> {
+            d.dismiss();
+            if (!isLocationPermissionGranted() || !isGpsEnabled()) {
+                Intent noperm = new Intent(getApplicationContext(), Nopermission.class);
+                startActivity(noperm);
+                return;
             }
+            thistag = venue.placeId;
+            gettheroutes(thistag);
         });
 
+        dialog.setNegativeButton(thiscancel, (d, which) -> d.dismiss());
 
-        // Setting button height
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        buttonParams.height = 80;  // adjust this value to your liking
-        button.setTextSize(14);  // adjust this value to your liking
-        int padding = 20;  // adjust this value to your liking
-        button.setPadding(padding, padding, padding, padding);
-
-        // Aligning text to the left and adding an image
-        button.setGravity(Gravity.START);  // This aligns the text to the left
-        int drawableLeft;
-        // Log.i("side",tag);
-
-        drawableLeft = R.drawable.calloffice;  // Replace with your drawable resource ID
-
-        button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, 0, 0);
-        button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(margin, 0, margin, 30);
-        button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-        LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-        linearLayout.addView(button);
-
-        /* Button New End Here */
-
+        dialog.create().show();
     }
 
-
-    private void callpolicebutton(){
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-        /* Button  new start here */
-        Button button = new Button(this);
-        button.setTag("1");
-        button.setText("Call Police");
-        button.setTextColor(ContextCompat.getColor(this, android.R.color.white));
-        button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_res));
-
-
-
-        // Add an OnClickListener to handle button clicks
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Handle button click here
-                String  tag = (String) view.getTag();
-                // You can use the tag (index) to identify which button was clicked.
-
-                Uri number = Uri.parse("tel:4760608");
-                Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
-                startActivity(callIntent);
-            }
-        });
-
-
-        // Setting button height
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        buttonParams.height = 80;  // adjust this value to your liking
-        button.setTextSize(14);  // adjust this value to your liking
-        int padding = 20;  // adjust this value to your liking
-        button.setPadding(padding, padding, padding, padding);
-
-        // Aligning text to the left and adding an image
-        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);  // This aligns the text to the left
-        int drawableLeft;
-        // Log.i("side",tag);
-
-        drawableLeft = R.drawable.police;  // Replace with your drawable resource ID
-
-        button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, 0, 0);
-        button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(margin, 0, margin, 30);
-        button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-        LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-        linearLayout.addView(button);
-
-        /* Button New End Here */
-
+    @Override
+    public void onCallClick(Venue venue) {
+        Uri number = Uri.parse("tel:" + venue.phone);
+        Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
+        startActivity(callIntent);
     }
 
-
-
-
-
-    private void beachbutton(){
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-        /* Button  new start here */
-        Button button = new Button(this);
-        button.setTag("1");
-        button.setText("Beach Map");
-
-        // Add an OnClickListener to handle button clicks
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Handle button click here
-                String  tag = (String) view.getTag();
-                // You can use the tag (index) to identify which button was clicked.
-
-                Intent intent = new Intent(getApplicationContext(), Loadmaps.class);
-                intent.putExtra("itemid",itemid);
-                intent.putExtra("list",tag);
-                startActivity(intent);
-
-            }
-        });
-
-
-        // Setting button height
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        buttonParams.height = 80;  // adjust this value to your liking
-        button.setTextSize(14);  // adjust this value to your liking
-        int padding = 20;  // adjust this value to your liking
-        button.setPadding(padding, padding, padding, padding);
-
-        // Aligning text to the left and adding an image
-        button.setGravity(Gravity.START);  // This aligns the text to the left
-        int drawableLeft;
-        // Log.i("side",tag);
-
-        drawableLeft = R.drawable.beachmap;  // Replace with your drawable resource ID
-
-        button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, 0, 0);
-        button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(margin, 0, margin, 30);
-        button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-        LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-        linearLayout.addView(button);
-
-        /* Button New End Here */
-
+    @Override
+    public void onRateClick(Venue venue, int position) {
+        showRatingDialog(venue.site.isEmpty() ? venue.name : venue.site,
+                venue.placeId, "loadlist", position);
     }
 
+    private void showRatingDialog(String name, String placeId, String placeType, int adapterPosition) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Rate " + name);
 
-    private void restaurantbutton(){
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
+        // Build star selector layout
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(android.view.Gravity.CENTER);
+        layout.setPadding(0, 32, 0, 16);
 
-        /* Button  new start here */
-        Button button = new Button(this);
-        button.setTag("99999");//so not removed
-        button.setText("Initializing..");
-        button.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        LinearLayout starsRow = new LinearLayout(this);
+        starsRow.setOrientation(LinearLayout.HORIZONTAL);
+        starsRow.setGravity(android.view.Gravity.CENTER);
 
-        button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_res));
+        final int[] selectedRating = {0};
+        final TextView[] starViews = new TextView[5];
 
-
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                // This code will be executed after a delay of 2 seconds
-                button.setText("Sort List A - Z");
-            }
-        }, 4000); // Delay in milliseconds (2000ms = 2s)
-
-        // Add an OnClickListener to handle button clicks
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Handle button click here
-                String  tag = (String) view.getTag();
-
-                if(tag.equals("99999")){
-                    button.setTag("99998");
-                    button.setText("Sort by Distance");
-                    loadlist("venue");
-                    loading.setText("Sorting A to Z .. loading");
-                }else if(tag.equals("99998")){
-                    button.setTag("99999");
-                    button.setText("Sort List A - Z");
-                    loadlist("distance");
-                    loading.setText("Sorting by distance .. loading");
-
+        for (int i = 0; i < 5; i++) {
+            final int starIndex = i;
+            TextView star = new TextView(this);
+            star.setText("\u2605");
+            star.setTextSize(36);
+            star.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.star_empty));
+            star.setPadding(8, 0, 8, 0);
+            starViews[i] = star;
+            star.setOnClickListener(v -> {
+                selectedRating[0] = starIndex + 1;
+                for (int j = 0; j < 5; j++) {
+                    starViews[j].setTextColor(androidx.core.content.ContextCompat.getColor(this,
+                            j <= starIndex ? R.color.star_filled : R.color.star_empty));
                 }
+            });
+            starsRow.addView(star);
+        }
+        layout.addView(starsRow);
+        builder.setView(layout);
 
-
+        builder.setPositiveButton("Submit", (d, which) -> {
+            if (selectedRating[0] == 0) {
+                Toast.makeText(this, "Please select a rating", Toast.LENGTH_SHORT).show();
+                return;
             }
+            submitRating(placeId, placeType, selectedRating[0], adapterPosition);
         });
-
-
-
-        // Setting button height
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        buttonParams.height = 80;  // adjust this value to your liking
-        button.setTextSize(14);  // adjust this value to your liking
-        int padding = 20;  // adjust this value to your liking
-        button.setPadding(padding, padding, padding, padding);
-
-        // Aligning text to the left and adding an image
-        button.setGravity(Gravity.START);  // This aligns the text to the left
-        int drawableLeft;
-        // Log.i("side",tag);
-
-        drawableLeft = R.drawable.eatmap;  // Replace with your drawable resource ID
-
-       // button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, 0, 0);
-        button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(margin, 0, margin, 30);
-        button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-        LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-        linearLayout.addView(button);
-
-        /* Button New End Here */
-
+        builder.setNegativeButton("Cancel", (d, which) -> d.dismiss());
+        builder.create().show();
     }
 
+    private void submitRating(String placeId, String placeType, int rating, int adapterPosition) {
+        String thisdevice = Settings.Secure.getString(this.getContentResolver(),
+                Settings.Secure.ANDROID_ID);
+        String url = justhelper.BASE_URL + "/navigation/submit_rating.php?device_id=" + thisdevice
+                + "&place_id=" + placeId
+                + "&place_type=" + placeType
+                + "&rating=" + rating;
 
-    private void interestbutton(){
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-        /* Button  new start here */
-        Button button = new Button(this);
-        button.setTag("2");
-        button.setText("Interest Map");
-
-        // Add an OnClickListener to handle button clicks
-        button.setOnClickListener(new View.OnClickListener() {
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder().url(url).build();
+        client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onClick(View view) {
-                // Handle button click here
-                String  tag = (String) view.getTag();
-                // You can use the tag (index) to identify which button was clicked.
+            public void onFailure(Call call, IOException e) {
+                runOnUiThread(() -> Toast.makeText(Loaditems.this, "Failed to submit rating", Toast.LENGTH_SHORT).show());
+            }
 
-                Intent intent = new Intent(getApplicationContext(), Loadmaps.class);
-                intent.putExtra("itemid",itemid);
-                intent.putExtra("list",tag);
-                startActivity(intent);
-
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String body = response.body().string();
+                try {
+                    JSONObject json = new JSONObject(body);
+                    if (json.optString("status").equals("ok")) {
+                        double avg = json.optDouble("avg_rating", 0);
+                        int total = json.optInt("total_ratings", 0);
+                        runOnUiThread(() -> {
+                            adapter.updateRating(adapterPosition, avg, total);
+                            Toast.makeText(Loaditems.this, "Thanks for rating!", Toast.LENGTH_SHORT).show();
+                        });
+                    }
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(Loaditems.this, "Failed to submit rating", Toast.LENGTH_SHORT).show());
+                }
             }
         });
-
-
-
-        // Setting button height
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        buttonParams.height = 80;  // adjust this value to your liking
-        button.setTextSize(14);  // adjust this value to your liking
-        int padding = 20;  // adjust this value to your liking
-        button.setPadding(padding, padding, padding, padding);
-
-        // Aligning text to the left and adding an image
-        button.setGravity(Gravity.START);  // This aligns the text to the left
-        int drawableLeft;
-        // Log.i("side",tag);
-
-        drawableLeft = R.drawable.eatmap;  // Replace with your drawable resource ID
-
-        button.setCompoundDrawablesWithIntrinsicBounds(drawableLeft, 0, 0, 0);
-        button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-// Setting margins
-        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(margin, 0, margin, 30);
-        button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-        LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-        linearLayout.addView(button);
-
-        /* Button New End Here */
-
     }
 
+    // --- Navigation launch flow (unchanged) ---
 
-
-    public void  gettheroutes(String thisplace){
-
-
-
-
-
+    public void gettheroutes(String thisplace) {
         try {
-
-            System.out.println("https://xcape.ai/navigation/getroute.php?&id=" + thisplace );
-            returnroute("https://xcape.ai/navigation/getroute.php?&id=" + thisplace );
-
+            System.out.println(justhelper.BASE_URL + "/navigation/getroute.php?&id=" + thisplace);
+            returnroute(justhelper.BASE_URL + "/navigation/getroute.php?&id=" + thisplace);
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
-
-
     }
 
-
-    void returnroute(String url) throws IOException{
+    void returnroute(String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
@@ -1100,44 +515,28 @@ public class Loaditems extends AppCompatActivity {
                 .enqueue(new Callback() {
                     @Override
                     public void onFailure(final Call call, IOException e) {
-                        // Error
-
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // For the example, you can show an error dialog or a toast
-                                // on the main UI thread
-                            }
-                        });
+                        runOnUiThread(() ->
+                                Toast.makeText(Loaditems.this, "Failed to load route", Toast.LENGTH_SHORT).show()
+                        );
                     }
 
                     @Override
                     public void onResponse(Call call, final Response response) throws IOException {
-
-
-
-
-
                         String resulting = response.body().string().trim();
                         String modifiednow = locationnow.replace(',', '/');
-                        String routenow = modifiednow+"~"+resulting;
+                        String routenow = modifiednow + "~" + resulting;
                         Log.d("routex", ": " + routenow);
 
-
                         Intent activity = new Intent(getApplicationContext(), Pickup.class);
-                        activity.putExtra("itemid",itemid);
-                        activity.putExtra("placeid",thistag);
-                        activity.putExtra("theroute",routenow);
+                        activity.putExtra("itemid", itemid);
+                        activity.putExtra("placeid", thistag);
+                        activity.putExtra("theroute", routenow);
                         startActivity(activity);
-
-
-
-                    }//end void
-
+                    }
                 });
     }
 
-
+    // --- Fullscreen helpers (unchanged) ---
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
@@ -1158,5 +557,12 @@ public class Loaditems extends AppCompatActivity {
                         | View.SYSTEM_UI_FLAG_FULLSCREEN);
     }
 
+    private boolean isGpsEnabled() {
+        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        return lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+    }
 
+    private boolean isLocationPermissionGranted() {
+        return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
 }

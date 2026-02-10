@@ -20,6 +20,7 @@ import android.widget.Button;
 import android.widget.Toast;
 
 import com.google.firebase.analytics.FirebaseAnalytics;
+import com.google.firebase.messaging.FirebaseMessaging;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -69,8 +70,17 @@ public class MainActivity extends AppCompatActivity   {
 
         firebaseAnalytics = FirebaseAnalytics.getInstance(this);
 
-
-
+        // Initialize FCM and register token with server
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.w("FCM", "Fetching FCM token failed", task.getException());
+                        return;
+                    }
+                    String token = task.getResult();
+                    Log.d("FCM", "FCM Token: " + token);
+                    MyFirebaseMessagingService.sendTokenToServer(getApplicationContext(), token);
+                });
 
 
 
@@ -105,7 +115,7 @@ public class MainActivity extends AppCompatActivity   {
 
         try {
 
-            senddevice("https://xcape.ai/navigation/deviceload.php?deviceid="+globaldevice);
+            senddevice(justhelper.BASE_URL + "/navigation/deviceload.php?deviceid="+globaldevice);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -159,7 +169,7 @@ public class MainActivity extends AppCompatActivity   {
 
                                 try {
 
-                                    sendreferer("https://xcape.ai/navigation/refererr.php?os=android&device="+globaldevice+"&path="+referrerUrl);
+                                    sendreferer(justhelper.BASE_URL + "/navigation/refererr.php?os=android&device="+globaldevice+"&path="+referrerUrl);
 
                                 } catch (IOException e) {
                                     e.printStackTrace();
@@ -291,34 +301,30 @@ public class MainActivity extends AppCompatActivity   {
 
 
     private void checkAndRequestPermissions() {
-        if (!isLocationPermissionGranted() || !isGpsEnabled()) {
-            // If the location permission has not been granted, redirect to the disclosure page.
-            Intent activity = new Intent(getApplicationContext(), Disclosure.class);
-            startActivity(activity);
-        }else if (!NetworkUtil.isInternetAvailable(getApplicationContext()) ) {
+        if (!NetworkUtil.isInternetAvailable(getApplicationContext())) {
             Intent activity = new Intent(getApplicationContext(), Nointernet.class);
             startActivity(activity);
-
-        }else{
-
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    // Create an Intent that will start the main activity.
-                    Intent i = new Intent(getApplicationContext(), Myservice.class);
-                    getApplicationContext().startService(i);
-
-                    Intent activity = new Intent(getApplicationContext(), SelectCountry.class);
-                    startActivity(activity);
-                }
-            }, SPLASH_DISPLAY_LENGTH);
-
-
-
-
-
-
+            return;
         }
+
+        // Show disclosure as a non-blocking soft ask if GPS not available
+        if (!isLocationPermissionGranted() || !isGpsEnabled()) {
+            Intent disclosure = new Intent(getApplicationContext(), Disclosure.class);
+            startActivity(disclosure);
+        } else {
+            // GPS available — start location service immediately
+            Intent i = new Intent(getApplicationContext(), Myservice.class);
+            getApplicationContext().startService(i);
+        }
+
+        // Either way, proceed to app after splash delay
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                Intent activity = new Intent(getApplicationContext(), SelectCountry.class);
+                startActivity(activity);
+            }
+        }, SPLASH_DISPLAY_LENGTH);
     }
 
 
@@ -372,37 +378,24 @@ public class MainActivity extends AppCompatActivity   {
 
 
     public void createLocationFile() {
-
-
-
         String fileName = "navi.txt";
-        String content = "18.18568295254444, -63.134536600353854";
+        String content = "18.2206,-63.0686";
 
-        File file = new File(getFilesDir(), fileName);
-
-        if (!file.exists()) {
-            FileOutputStream fos = null;
-            try {
-                fos = openFileOutput(fileName, Context.MODE_PRIVATE);
-                fos.write(content.getBytes());
-                // File written successfully
-            } catch (IOException e) {
-                e.printStackTrace();
-                // Error writing file
-            } finally {
-                if (fos != null) {
-                    try {
-                        fos.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+        FileOutputStream fos = null;
+        try {
+            fos = openFileOutput(fileName, Context.MODE_PRIVATE);
+            fos.write(content.getBytes());
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
-         } else {
-            // File already exists, handle accordingly
         }
-
-
     }
 
 

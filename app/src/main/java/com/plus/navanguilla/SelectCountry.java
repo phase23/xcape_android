@@ -76,7 +76,7 @@ public class SelectCountry extends AppCompatActivity {
 
 
         try {
-            doGetRequest("https://xcape.ai/navigation/selectcountry.php");
+            doGetRequest(justhelper.BASE_URL + "/navigation/selectcountry.php");
 
 
 

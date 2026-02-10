@@ -259,7 +259,7 @@ public class Loadmaps extends FragmentActivity implements OnMapReadyCallback,Goo
         double mydoublelon = Double.parseDouble(parts[1]);
 
         try {
-            goloadmap("https://xcape.ai/navigation/loadmaps.php?list="+thelist + "&location="+getlocation);
+            goloadmap(justhelper.BASE_URL + "/navigation/loadmaps.php?list="+thelist + "&location="+getlocation);
 
         } catch (IOException e) {
             e.printStackTrace();

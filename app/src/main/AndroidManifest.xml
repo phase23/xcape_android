@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -29,7 +30,11 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme.NoActionBar">
+        <activity
+            android:name=".WebViewActivity"
+            android:exported="false" />
         <activity
             android:name=".Esims"
             android:exported="false" />
@@ -41,6 +46,9 @@
             android:exported="false" />
         <activity
             android:name=".Contactus"
+            android:exported="false" />
+        <activity
+            android:name=".LoadExitInterview"
             android:exported="false" />
         <activity
             android:name=".Nointernet"
@@ -55,10 +63,19 @@
             android:name=".Disclosure"
             android:exported="false" />
         <activity
+            android:name=".LoadCalendar"
+            android:exported="false" />
+        <activity
+            android:name=".LoadHistoricalSites"
+            android:exported="false" />
+        <activity
             android:name=".Loadevents"
             android:exported="false" />
         <activity
             android:name=".Renturnhome"
+            android:exported="false" />
+        <activity
+            android:name=".LoadTours"
             android:exported="false" />
         <activity
             android:name=".Islandtour"
@@ -113,6 +130,14 @@
         <service
             android:name=".Myservice"
             android:enabled="true" />
+
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

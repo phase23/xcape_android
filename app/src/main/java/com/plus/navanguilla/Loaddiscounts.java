@@ -2,11 +2,11 @@ package com.plus.navanguilla;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -15,21 +15,20 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -37,64 +36,69 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class Loaddiscounts extends AppCompatActivity {
-    String getload;
-    Handler handler2;
-    String returnshift;
-    String someitems;
-    Button goback;
-    String locationnow;
-    String itemid;
-    String thistag;
-    TextView loading;
-    ProgressBar progressBar;
-    String cid;
-    String thiscountry;
+public class Loaddiscounts extends AppCompatActivity implements EventAdapter.OnEventClickListener {
+
+    private Handler handler;
+    private String locationnow;
+    private String itemid;
+    private String thistag;
+    private View loadingContainer;
+    private String cid;
+
+    private RecyclerView recyclerView;
+    private EventAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+
+        justhelper.setBrightness(this, 75);
         setContentView(R.layout.activity_loaddiscounts);
+        handler = new Handler(Looper.getMainLooper());
 
-        justhelper.setBrightness(this, 75); // Sets brightness to 75%
-        setContentView(R.layout.activity_loadevents);
-        handler2 = new Handler(Looper.getMainLooper());
+        Button goback = findViewById(R.id.backmain);
+        loadingContainer = findViewById(R.id.loading_container);
 
-        final LinearLayout layout = findViewById(R.id.scnf);
-        goback = (Button)findViewById(R.id.backmain);
-        loading = (TextView) findViewById(R.id.loadingtext);
-        progressBar = findViewById(R.id.spin_kit);
-
-        goback.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Loaddiscounts.this, Myactivity.class);
-                startActivity(intent);
-
-            }
+        goback.setOnClickListener(v -> {
+            Intent intent = new Intent(Loaddiscounts.this, Myactivity.class);
+            startActivity(intent);
         });
 
-
         itemid = "";
-        Log.i("side",itemid);
+
+        // Set up RecyclerView
+        recyclerView = findViewById(R.id.discount_list);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        float density = getResources().getDisplayMetrics().density;
+        int sideMargin = (int) (16 * density);
+        int topPadding = (int) (20 * density);
+        recyclerView.setPadding(sideMargin, topPadding, sideMargin, 0);
+        adapter = new EventAdapter(this, R.drawable.discount);
+        recyclerView.setAdapter(adapter);
+
+        SharedPreferences shared = getSharedPreferences("autoLogin", MODE_PRIVATE);
+        cid = shared.getString("cid", "");
 
         try {
-
-
-            SharedPreferences shared = getSharedPreferences("autoLogin", MODE_PRIVATE);
-            SharedPreferences.Editor prefsEditor = shared.edit();
-
-            cid = shared.getString("cid", "");
-            thiscountry = shared.getString("country", "");
-
-
             String getlocation = readFile();
-            doLoadlist("https://xcape.ai/navigation/loaddiscounts.php?location="+getlocation  + "&cid="+cid);
-
+            doLoadlist(justhelper.BASE_URL + "/navigation/loaddiscounts.php?location=" + getlocation + "&cid=" + cid);
         } catch (IOException e) {
             e.printStackTrace();
+            loadingContainer.setVisibility(View.GONE);
+            Toast.makeText(this, "Failed to load discounts", Toast.LENGTH_SHORT).show();
         }
+    }
 
+    @Override
+    public void onBackPressed() {
+        Intent intent = new Intent(Loaddiscounts.this, Myactivity.class);
+        startActivity(intent);
     }
 
     public String readFile() {
@@ -116,272 +120,117 @@ public class Loaddiscounts extends AppCompatActivity {
             }
 
             locationnow = stringBuilder.toString();
-            // Use the file contents as needed
-            // Uncomment the line below to display a toast message with the content
-            // Toast.makeText(getApplicationContext(), "Serlat: " + locationnow, Toast.LENGTH_LONG).show();
         } catch (IOException e) {
             e.printStackTrace();
-            // Error reading file
         } finally {
             if (br != null) {
-                try {
-                    br.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { br.close(); } catch (IOException e) { e.printStackTrace(); }
             }
             if (isr != null) {
-                try {
-                    isr.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { isr.close(); } catch (IOException e) { e.printStackTrace(); }
             }
             if (fis != null) {
-                try {
-                    fis.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                try { fis.close(); } catch (IOException e) { e.printStackTrace(); }
             }
         }
 
-        return  locationnow;
+        return locationnow;
     }
 
     void doLoadlist(String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
-        Log.i("ddevice",url);
+        Log.i("ddevice", url);
         OkHttpClient client = new OkHttpClient();
         client.newCall(request)
                 .enqueue(new Callback() {
                     @Override
                     public void onFailure(final Call call, IOException e) {
-                        Log.i("ddevice","errot"); // Error
-
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // For the example, you can show an error dialog or a toast
-                                // on the main UI thread
-                            }
+                        Log.i("ddevice", "error " + e);
+                        runOnUiThread(() -> {
+                            loadingContainer.setVisibility(View.GONE);
+                            Toast.makeText(Loaddiscounts.this, "Failed to load discounts", Toast.LENGTH_SHORT).show();
                         });
                     }
 
                     @Override
                     public void onResponse(Call call, final Response response) throws IOException {
+                        final String json = response.body().string();
+                        Log.i("ddevice", json);
 
-
-                        someitems = response.body().string();
-                        Log.i("ddevice",someitems);
-
-                        handler2.post(new Runnable() {
-                            @Override
-                            public void run() {
-
-
-
-
-
-                                othernav(someitems);
-                                loading.setVisibility(View.INVISIBLE);
-                                progressBar.setVisibility(View.GONE);
-                            }
+                        handler.post(() -> {
+                            parseAndDisplay(json);
+                            loadingContainer.setVisibility(View.GONE);
                         });
-
-
-                    }//end if
-
-
-
-
+                    }
                 });
-
     }
+
+    private void parseAndDisplay(String json) {
+        List<Event> events = new ArrayList<>();
+        try {
+            JSONArray jsonArray = new JSONArray(json);
+            for (int i = 0; i < jsonArray.length(); i++) {
+                events.add(Event.fromJson(jsonArray.getJSONObject(i)));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Failed to parse discount data", Toast.LENGTH_SHORT).show();
+        }
+        adapter.setEvents(events);
+    }
+
+    // --- EventAdapter.OnEventClickListener ---
+
+    @Override
+    public void onEventClick(Event event) {
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this);
+        dialog.setCancelable(false);
+        dialog.setTitle("Start Navigation");
+        dialog.setMessage("Navigate to " + event.venue + "?");
+
+        dialog.setPositiveButton("Yes", (d, id) -> {
+            thistag = event.placeId;
+            checkAndRequestPermissions();
+            d.dismiss();
+        });
+
+        dialog.setNegativeButton("No", (d, which) -> d.dismiss());
+
+        dialog.create().show();
+    }
+
+    // --- Permissions + navigation ---
 
     private void checkAndRequestPermissions() {
         if (!isLocationPermissionGranted() || !isGpsEnabled()) {
-            // If the location permission has not been granted, redirect to the disclosure page.
             Intent activity = new Intent(getApplicationContext(), Nopermission.class);
             startActivity(activity);
-
-        }else {
-
+        } else {
             gettheroutes(thistag);
-
-
         }
-
     }
-
 
     private boolean isGpsEnabled() {
         LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
     }
 
-
     private boolean isLocationPermissionGranted() {
-        return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        return ActivityCompat.checkSelfPermission(this,
+                android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
-
-    public void othernav(String json) {
-        int totalWidth = getResources().getDisplayMetrics().widthPixels;
-        int margin = (int) (totalWidth * 0.10);  // 30% of screen width
-
-        Log.i("jss",json);
-
+    public void gettheroutes(String placeid) {
         try {
-            JSONArray jsonArray = new JSONArray(json);
-
-            for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject jsonObject = jsonArray.getJSONObject(i);
-
-                // Extracting data from JSON object
-                String placeId = jsonObject.getString("placeid");
-                String whichday = jsonObject.getString("whichday").trim();
-
-                String showtime = jsonObject.getString("showtime").trim();
-                String venue = jsonObject.getString("venue").trim();
-                String artist = jsonObject.getString("artist").trim();
-
-                double distance = jsonObject.getDouble("distance");
-                String formattedDistance = String.format("%.2f", distance);
-
-
-
-                // Creating button text
-                String buttonText = whichday + "\n" + venue + "\n" + artist + "\n" + showtime +"\n" + formattedDistance + " Miles";
-                // Create a button
-                Log.i("button",buttonText);
-                Button button = new Button(this);
-                button.setTag(placeId);  // Set placeId as tag
-                button.setText(buttonText);
-
-                // Add an OnClickListener to handle button clicks
-                button.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-
-                        AlertDialog.Builder dialog = new AlertDialog.Builder(Loaddiscounts.this);
-                        dialog.setCancelable(false);
-                        dialog.setTitle("Start Navigation");
-                        dialog.setMessage("Are you sure you want start this route?");
-                        dialog.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int id) {
-
-                                thistag = (String) button.getTag();
-                                //gettheroutes(thistag);
-                                checkAndRequestPermissions();
-
-                                dialog.dismiss();
-                            }
-                        })
-                                .setNegativeButton("No ", new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        //Action for "Cancel".
-                                        dialog.dismiss();
-                                    }
-                                });
-
-                        final AlertDialog alert = dialog.create();
-                        alert.show();
-
-
-                    }
-                });
-
-                // Setting button height and other properties
-                LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                buttonParams.height = 80;  // adjust this value to your liking
-                button.setTextSize(14);  // adjust this value to your liking
-                int padding = 20;  // adjust this value to your liking
-                button.setPadding(padding, padding, padding, padding);
-
-// Aligning text to the left and adding an image
-                button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-                Log.i("ddevice",itemid); // Error
-                int drawableLeft;
-
-
-                drawableLeft = R.drawable.discount;
-                int drawableRight = R.drawable.chevron;
-
-                switch(whichday){
-                    default:
-                        button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background_ent));
-                        break;
-                    case "MONDAY":
-                    case "WEDNESDAY":
-                    case "FRIDAY":
-                    case "SUNDAY ":
-                        button.setBackground(ContextCompat.getDrawable(this, R.drawable.rounded_button_background));
-                        break;
-
-
-
-                }
-
-
-
-
-                button.setCompoundDrawablePadding(10); // Optional, if you want padding between text and image
-
-
-// Setting margins
-                LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                layoutParams.setMargins(margin, 0, margin, 30);
-                button.setLayoutParams(layoutParams);
-
-// Add the button to your layout
-                LinearLayout linearLayout = findViewById(R.id.scnf); // Replace with your layout ID
-                linearLayout.addView(button);
-
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-
-
-
-
-    }
-
-    @Override
-    public void onBackPressed() {
-
-    }
-
-    public void  gettheroutes(String placeid){
-
-
-
-
-
-        try {
-
-            System.out.println("https://xcape.ai/navigation/getroute.php?&id=" + placeid );
-            returnroute("https://xcape.ai/navigation/getroute.php?&id=" + placeid );
-
+            returnroute(justhelper.BASE_URL + "/navigation/getroute.php?&id=" + placeid);
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
-
-
     }
 
-
-    void returnroute(String url) throws IOException{
+    void returnroute(String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
@@ -391,48 +240,46 @@ public class Loaddiscounts extends AppCompatActivity {
                 .enqueue(new Callback() {
                     @Override
                     public void onFailure(final Call call, IOException e) {
-                        // Error
-
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // For the example, you can show an error dialog or a toast
-                                // on the main UI thread
-                            }
-                        });
+                        runOnUiThread(() ->
+                                Toast.makeText(Loaddiscounts.this, "Failed to load route", Toast.LENGTH_SHORT).show()
+                        );
                     }
 
                     @Override
                     public void onResponse(Call call, final Response response) throws IOException {
-
-
-
-
-
                         String resulting = response.body().string().trim();
                         String modifiednow = locationnow.replace(',', '/');
-                        String routenow = modifiednow+"~"+resulting;
+                        String routenow = modifiednow + "~" + resulting;
                         Log.d("routex", ": " + routenow);
 
-
                         Intent activity = new Intent(getApplicationContext(), Pickup.class);
-                        activity.putExtra("itemid",itemid);
-                        activity.putExtra("theroute",routenow);
-                        activity.putExtra("placeid",thistag);
-                        activity.putExtra("preclass","1");
-
+                        activity.putExtra("itemid", itemid);
+                        activity.putExtra("theroute", routenow);
+                        activity.putExtra("placeid", thistag);
+                        activity.putExtra("preclass", "1");
                         startActivity(activity);
-
-
-
-                    }//end void
-
+                    }
                 });
     }
 
+    // --- Fullscreen helpers ---
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            hideSystemUI();
+        }
+    }
 
-
-
-
+    private void hideSystemUI() {
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN);
+    }
 }

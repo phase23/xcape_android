@@ -30,6 +30,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -126,6 +127,14 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
     String closestWaypointStr;
     String cid;
     String thiscountry;
+    String tourId;
+    String tourName;
+    String tourDuration;
+    private boolean isFollowingUser = true;
+    private ImageView recenterBtn;
+    private double lastLat;
+    private double lastLon;
+    private float lastBearing;
 
        // 20 degrees tolerance
     private boolean isTTSInitialized = false;
@@ -160,6 +169,9 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
         ll.setAlpha(0.5f);
 
         itemid = getIntent().getExtras().getString("itemid","defaultKey");
+        tourId = getIntent().getExtras().getString("tour_id", "1");
+        tourName = getIntent().getExtras().getString("tour_name", "Island Tour");
+        tourDuration = getIntent().getExtras().getString("tour_duration", "");
 
 
         int SDK_INT = android.os.Build.VERSION.SDK_INT;
@@ -183,6 +195,24 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
         getback = (Button)findViewById(R.id.dialcustomer);
         //startroutex = (Button)findViewById(R.id.startjourney);
         //prvieworders = (Button)findViewById(R.id.prvieworders);
+
+        recenterBtn = (ImageView) findViewById(R.id.recenterBtn);
+        recenterBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                isFollowingUser = true;
+                recenterBtn.setVisibility(View.GONE);
+                if (mMap != null) {
+                    CameraPosition position = CameraPosition.builder()
+                            .bearing(lastBearing)
+                            .target(new LatLng(lastLat, lastLon))
+                            .zoom(mMap.getCameraPosition().zoom)
+                            .tilt(30.0f)
+                            .build();
+                    mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+                }
+            }
+        });
 
 
 /*
@@ -281,8 +311,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
 
                     public void onClick(DialogInterface dialog, int which) {
                         String tag = (String) view.getTag();
-                        Intent intent = new Intent(getApplicationContext(), Myactivity.class);
-                        intent.putExtra("list",itemid);
+                        Intent intent = new Intent(getApplicationContext(), LoadTours.class);
                         startActivity(intent);
 
                     }
@@ -322,7 +351,11 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
             // Optionally set language, pitch, etc.
             float speechRate = 0.7f; // 50% of the normal speech rate
             //tts.setSpeechRate(speechRate);
-            tts.speak("Follow to route to start your 45min tour", TextToSpeech.QUEUE_FLUSH, null, null);
+            String introSpeech = "Follow the route to start your " + tourName + " tour";
+            if (tourDuration != null && !tourDuration.isEmpty()) {
+                introSpeech = "Follow the route to start your " + tourDuration + " " + tourName + " tour";
+            }
+            tts.speak(introSpeech, TextToSpeech.QUEUE_FLUSH, null, null);
         } else {
             // Initialization failed
         }
@@ -372,7 +405,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
         String sendroute = mylat +"," + mylon + ","+ dmylat + ","+dmylon;
 /* WAY POINTS TO GET TIME ALL
         try {
-            sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+sendroute);
+            sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+sendroute);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -423,7 +456,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
         mysource  = new LatLng(myLatNowDouble, myLonNowDouble);
 /*
         try {
-            goloadmap("https://xcape.ai/navigation/markwaypoints.php");
+            goloadmap(justhelper.BASE_URL + "/navigation/markwaypoints.php");
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -529,15 +562,26 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
                 .tilt(30.0f)
                 .build();
 
+        // One-time zoom-in: animate to 18 then remove the listener
         mMap.setOnCameraIdleListener(new GoogleMap.OnCameraIdleListener() {
             @Override
             public void onCameraIdle() {
                 float currentZoom = mMap.getCameraPosition().zoom;
-                if (currentZoom != 18.0f) {
-                    // The zoom level is not what we expected, try zooming again
+                if (currentZoom < 18.0f) {
                     mMap.animateCamera(CameraUpdateFactory.zoomTo(18.0f));
+                } else {
+                    mMap.setOnCameraIdleListener(null);
                 }
-                // Else, the zoom level is as expected
+            }
+        });
+
+        mMap.setOnCameraMoveStartedListener(new GoogleMap.OnCameraMoveStartedListener() {
+            @Override
+            public void onCameraMoveStarted(int reason) {
+                if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                    isFollowingUser = false;
+                    recenterBtn.setVisibility(View.VISIBLE);
+                }
             }
         });
 
@@ -900,7 +944,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
 
         String location = readFile().trim();
         //String modifiednow = locationnow.replace(',', '/');
-        String url = "https://xcape.ai/navigation/getwaypoints.php?location="+location + "&cid=" +cid ;
+        String url = justhelper.BASE_URL + "/navigation/getwaypoints.php?location="+location + "&cid=" +cid + "&tour_id=" + tourId;
         Log.i("action url",url);
         OkHttpClient client = new OkHttpClient();
         RequestBody requestBody = new MultipartBody.Builder()
@@ -1108,17 +1152,13 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
 
             LatLng currentlocation = new LatLng(mydoublelat, mydoublelon);
 
+            lastLat = mydoublelat;
+            lastLon = mydoublelon;
+            lastBearing = thebearing;
 
             checkProximityToWaypoints(currentlocation, thebearing,waypoints);
 
-            CameraPosition position = CameraPosition.builder()
-                    .bearing(thebearing)
-                    .target(new LatLng(mydoublelat, mydoublelon))
-                    .zoom(mMap.getCameraPosition().zoom)
-                    .tilt(30.0f)
-                    .build();
-
-            //mMap.clear();
+            // Always update the driver marker
             drivermaker.remove();
             MarkerOptions mp = new MarkerOptions();
             mp.position(new LatLng(mydoublelat, mydoublelon));
@@ -1126,7 +1166,16 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
             mp.icon(BitmapDescriptorFactory.fromResource(R.drawable.mapmarker));
             drivermaker = mMap.addMarker(mp);
 
-            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+            // Only move camera when following user
+            if (isFollowingUser) {
+                CameraPosition position = CameraPosition.builder()
+                        .bearing(thebearing)
+                        .target(new LatLng(mydoublelat, mydoublelon))
+                        .zoom(mMap.getCameraPosition().zoom)
+                        .tilt(30.0f)
+                        .build();
+                mMap.animateCamera(CameraUpdateFactory.newCameraPosition(position));
+            }
 
 
             String nextroute = mydoublelat + "," + mydoublelon + "," + dmylat + "," + dmylon ;
@@ -1134,7 +1183,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
             try {
 
                 //updates time to loacation
-                sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+nextroute);
+                sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+nextroute);
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -1341,7 +1390,7 @@ public class Islandtour extends FragmentActivity implements OnMapReadyCallback,G
         cid = shared.getString("cid", "");
         thiscountry = shared.getString("country", "");
 
-        String url = "https://xcape.ai/navigation/loadwaymarkers.php?cid="+cid;
+        String url = justhelper.BASE_URL + "/navigation/loadwaymarkers.php?cid="+cid+"&tour_id="+tourId;
         Log.i("action url",url);
         OkHttpClient client = new OkHttpClient();
         RequestBody requestBody = new MultipartBody.Builder()

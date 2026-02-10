@@ -281,7 +281,7 @@ public class Renturnhome extends FragmentActivity implements OnMapReadyCallback,
         String sendroute = mylat +"," + mylon + ","+ dmylat + ","+dmylon;
 
         try {
-            sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+sendroute);
+            sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+sendroute);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -612,7 +612,7 @@ public class Renturnhome extends FragmentActivity implements OnMapReadyCallback,
             String nextroute = mydoublelat + "," + mydoublelon + "," + dmylat + "," + dmylon ;
 
             try {
-                sendforroute("https://xcape.ai/navigation/fetchroutedetails.php?location="+nextroute);
+                sendforroute(justhelper.BASE_URL + "/navigation/fetchroutedetails.php?location="+nextroute);
 
             } catch (IOException e) {
                 e.printStackTrace();

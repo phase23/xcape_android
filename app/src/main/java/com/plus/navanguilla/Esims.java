@@ -43,7 +43,7 @@ public class Esims extends AppCompatActivity {
             @Override
             public void onClick(View v) {
 
-                String url = "https://xcape.ai/esims/?os=android&country="+thiscountry; // Replace with your actual URL
+                String url = justhelper.BASE_URL + "/esims/?os=android&country="+thiscountry; // Replace with your actual URL
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setData(Uri.parse(url));
                 startActivity(intent); // Launch the browser
