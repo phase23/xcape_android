@@ -28,6 +28,17 @@ public class Venue {
     public double avgRating;
     public int totalRatings;
 
+    // Weather data (beaches only — populated from separate API call)
+    public boolean hasWeather = false;
+    public double tempC, tempF, feelsLikeC, feelsLikeF;
+    public String conditionText = "";
+    public String conditionIcon = "";
+    public double windMph, gustMph;
+    public String windDir = "";
+    public int humidity, cloud, chanceOfRain;
+    public double uv, waveHeightM, swellHeightM;
+    public String swellDir = "", sunrise = "", sunset = "";
+
     public static Venue fromJson(JSONObject obj) {
         Venue v = new Venue();
         v.placeId = obj.optString("placeid", "");

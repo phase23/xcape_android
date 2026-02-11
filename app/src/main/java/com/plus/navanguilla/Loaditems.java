@@ -39,7 +39,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -340,6 +342,41 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
             }
         });
         adapter.setVenues(venues);
+
+        // Fetch weather for beaches
+        if (itemid.equals("1")) {
+            fetchBeachWeather();
+        }
+    }
+
+    private void fetchBeachWeather() {
+        String url = justhelper.BASE_URL + "/navigation/load_beach_weather.php?cid=" + cid;
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder().url(url).build();
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.i("weather", "Failed to fetch beach weather: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String body = response.body().string();
+                try {
+                    JSONArray arr = new JSONArray(body);
+                    Map<String, JSONObject> weatherMap = new HashMap<>();
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject obj = arr.getJSONObject(i);
+                        weatherMap.put(obj.optString("lid", ""), obj);
+                    }
+                    runOnUiThread(() -> {
+                        adapter.applyWeather(weatherMap);
+                    });
+                } catch (Exception e) {
+                    Log.i("weather", "Error parsing weather: " + e.getMessage());
+                }
+            }
+        });
     }
 
     // --- VenueAdapter.OnVenueClickListener ---

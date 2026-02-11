@@ -31,8 +31,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     private static final String TAG = "FCM";
     private static final String CHANNEL_ID = "xcape_notifications";
-    // TODO: Change back to https://xcape.ai/navigation/register_token.php for production
-    private static final String REGISTER_URL = "http://192.168.0.171/xcape/navigation/register_token.php";
+    private static final String REGISTER_URL = justhelper.BASE_URL + "/navigation/register_token.php";
 
     @Override
     public void onNewToken(String token) {

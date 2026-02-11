@@ -10,8 +10,11 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.ViewFlipper;
+
+import org.json.JSONObject;
 
 import androidx.annotation.NonNull;
 import androidx.cardview.widget.CardView;
@@ -241,8 +244,8 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
         // Advertiser details section
         if (isAd) {
             holder.advertiserDetails.setVisibility(View.VISIBLE);
-            // Hide static opening times for restaurants — the hours row handles it
-            if (itemId.equals("2")) {
+            // Hide static opening times for restaurants (hours row handles it) and accommodations (not applicable)
+            if (itemId.equals("2") || itemId.equals("6")) {
                 holder.openingTimes.setVisibility(View.GONE);
                 holder.openingTimesOther.setVisibility(View.GONE);
             } else {
@@ -294,6 +297,59 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
             holder.ratingRow.setVisibility(View.GONE);
         }
 
+        // Weather strip (beaches only)
+        if (itemId.equals("1") && venue.hasWeather) {
+            holder.weatherStrip.setVisibility(View.VISIBLE);
+
+            // Load condition icon
+            String iconUrl = venue.conditionIcon;
+            if (iconUrl.startsWith("//")) iconUrl = "https:" + iconUrl;
+            Picasso.get().load(iconUrl).into(holder.weatherIcon);
+
+            // Temperature
+            holder.weatherTemp.setText(String.format("%.0f\u00B0C  Feels %.0f\u00B0", venue.tempC, venue.feelsLikeC));
+            holder.weatherCondition.setText(venue.conditionText);
+
+            // Wind / Humidity / Waves
+            holder.weatherWind.setText(String.format("\uD83D\uDCA8 %.0fmph %s", venue.windMph, venue.windDir));
+            holder.weatherHumidity.setText(String.format("\uD83D\uDCA7 %d%%", venue.humidity));
+            if (venue.waveHeightM > 0) {
+                holder.weatherWaves.setVisibility(View.VISIBLE);
+                holder.weatherWaves.setText(String.format("\uD83C\uDF0A %.1fm", venue.waveHeightM));
+            } else {
+                holder.weatherWaves.setVisibility(View.GONE);
+            }
+
+            // UV bar
+            int uvInt = (int) Math.round(venue.uv);
+            holder.weatherUvBar.setProgress(uvInt);
+            String uvLabel;
+            int uvColor;
+            Context ctx = holder.itemView.getContext();
+            if (uvInt <= 2) {
+                uvLabel = uvInt + " Low";
+                uvColor = ContextCompat.getColor(ctx, R.color.uv_low);
+            } else if (uvInt <= 5) {
+                uvLabel = uvInt + " Moderate";
+                uvColor = ContextCompat.getColor(ctx, R.color.uv_moderate);
+            } else if (uvInt <= 7) {
+                uvLabel = uvInt + " High";
+                uvColor = ContextCompat.getColor(ctx, R.color.uv_high);
+            } else if (uvInt <= 10) {
+                uvLabel = uvInt + " Very High";
+                uvColor = ContextCompat.getColor(ctx, R.color.uv_very_high);
+            } else {
+                uvLabel = uvInt + " Extreme";
+                uvColor = ContextCompat.getColor(ctx, R.color.uv_extreme);
+            }
+            holder.weatherUvValue.setText(uvLabel);
+            holder.weatherUvValue.setTextColor(uvColor);
+            holder.weatherUvBar.getProgressDrawable().setColorFilter(
+                    uvColor, android.graphics.PorterDuff.Mode.SRC_IN);
+        } else {
+            holder.weatherStrip.setVisibility(View.GONE);
+        }
+
         // Action row click
         holder.actionRow.setOnClickListener(v -> {
             if (listener != null) {
@@ -308,6 +364,60 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
             venues.get(position).totalRatings = totalRatings;
             notifyItemChanged(position);
         }
+    }
+
+    public void applyWeather(java.util.Map<String, JSONObject> weatherMap) {
+        for (int i = 0; i < venues.size(); i++) {
+            Venue v = venues.get(i);
+            JSONObject w = weatherMap.get(v.placeId);
+            if (w != null) {
+                v.hasWeather = true;
+                v.tempC = w.optDouble("temp_c", 0);
+                v.tempF = w.optDouble("temp_f", 0);
+                v.feelsLikeC = w.optDouble("feels_like_c", 0);
+                v.feelsLikeF = w.optDouble("feels_like_f", 0);
+                v.conditionText = w.optString("condition_text", "");
+                v.conditionIcon = w.optString("condition_icon", "");
+                v.windMph = w.optDouble("wind_mph", 0);
+                v.gustMph = w.optDouble("gust_mph", 0);
+                v.windDir = w.optString("wind_dir", "");
+                v.humidity = w.optInt("humidity", 0);
+                v.cloud = w.optInt("cloud", 0);
+                v.chanceOfRain = w.optInt("chance_of_rain", 0);
+                v.uv = w.optDouble("uv", 0);
+                v.waveHeightM = w.optDouble("wave_height_m", 0);
+                v.swellHeightM = w.optDouble("swell_height_m", 0);
+                v.swellDir = w.optString("swell_dir", "");
+                v.sunrise = w.optString("sunrise", "");
+                v.sunset = w.optString("sunset", "");
+            }
+        }
+        // Also update allVenues so filters preserve weather data
+        for (Venue v : allVenues) {
+            JSONObject w = weatherMap.get(v.placeId);
+            if (w != null && !v.hasWeather) {
+                v.hasWeather = true;
+                v.tempC = w.optDouble("temp_c", 0);
+                v.tempF = w.optDouble("temp_f", 0);
+                v.feelsLikeC = w.optDouble("feels_like_c", 0);
+                v.feelsLikeF = w.optDouble("feels_like_f", 0);
+                v.conditionText = w.optString("condition_text", "");
+                v.conditionIcon = w.optString("condition_icon", "");
+                v.windMph = w.optDouble("wind_mph", 0);
+                v.gustMph = w.optDouble("gust_mph", 0);
+                v.windDir = w.optString("wind_dir", "");
+                v.humidity = w.optInt("humidity", 0);
+                v.cloud = w.optInt("cloud", 0);
+                v.chanceOfRain = w.optInt("chance_of_rain", 0);
+                v.uv = w.optDouble("uv", 0);
+                v.waveHeightM = w.optDouble("wave_height_m", 0);
+                v.swellHeightM = w.optDouble("swell_height_m", 0);
+                v.swellDir = w.optString("swell_dir", "");
+                v.sunrise = w.optString("sunrise", "");
+                v.sunset = w.optString("sunset", "");
+            }
+        }
+        notifyDataSetChanged();
     }
 
     private void setupImageGallery(VenueViewHolder holder, List<String> imageUrls) {
@@ -430,6 +540,16 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
         LinearLayout starsContainer;
         TextView ratingText;
         TextView rateBtn;
+        // Weather
+        LinearLayout weatherStrip;
+        ImageView weatherIcon;
+        TextView weatherTemp;
+        TextView weatherCondition;
+        TextView weatherWind;
+        TextView weatherHumidity;
+        TextView weatherWaves;
+        ProgressBar weatherUvBar;
+        TextView weatherUvValue;
 
         VenueViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -460,6 +580,16 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
             starsContainer = itemView.findViewById(R.id.venue_stars_container);
             ratingText = itemView.findViewById(R.id.venue_rating_text);
             rateBtn = itemView.findViewById(R.id.venue_rate_btn);
+            // Weather
+            weatherStrip = itemView.findViewById(R.id.weather_strip);
+            weatherIcon = itemView.findViewById(R.id.weather_icon);
+            weatherTemp = itemView.findViewById(R.id.weather_temp);
+            weatherCondition = itemView.findViewById(R.id.weather_condition);
+            weatherWind = itemView.findViewById(R.id.weather_wind);
+            weatherHumidity = itemView.findViewById(R.id.weather_humidity);
+            weatherWaves = itemView.findViewById(R.id.weather_waves);
+            weatherUvBar = itemView.findViewById(R.id.weather_uv_bar);
+            weatherUvValue = itemView.findViewById(R.id.weather_uv_value);
         }
     }
 }
