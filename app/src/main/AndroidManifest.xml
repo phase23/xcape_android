@@ -66,6 +66,9 @@
             android:name=".LoadCalendar"
             android:exported="false" />
         <activity
+            android:name=".LoadFerrySchedule"
+            android:exported="false" />
+        <activity
             android:name=".LoadHistoricalSites"
             android:exported="false" />
         <activity

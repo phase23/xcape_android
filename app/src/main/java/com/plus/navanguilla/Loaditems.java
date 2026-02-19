@@ -59,7 +59,7 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
     private ProgressBar progressBar;
     private View loadingContainer;
     private String cid;
-    private boolean sortByDistance = true;
+    private String sortMode = "distance"; // distance, rating, name
     private boolean filterLocal = false;
 
     private RecyclerView recyclerView;
@@ -124,7 +124,7 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
             });
         }
 
-        // Sort toggle for restaurants only
+        // Sort toggle
         Button sortButton = findViewById(R.id.sort_button);
         Button localFilterButton = findViewById(R.id.local_filter_button);
         if (itemid.equals("2")) {
@@ -132,15 +132,16 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
             localFilterButton.setVisibility(View.VISIBLE);
             sortButton.setText("Sort List A - Z");
             sortButton.setOnClickListener(v -> {
-                sortByDistance = !sortByDistance;
-                if (sortByDistance) {
-                    sortButton.setText("Sort List A - Z");
-                    loadlist("distance");
-                    loading.setText("Sorting by distance .. loading");
-                } else {
+                if (sortMode.equals("distance")) {
+                    sortMode = "name";
                     sortButton.setText("Sort by Distance");
                     loadlist("venue");
                     loading.setText("Sorting A to Z .. loading");
+                } else {
+                    sortMode = "distance";
+                    sortButton.setText("Sort List A - Z");
+                    loadlist("distance");
+                    loading.setText("Sorting by distance .. loading");
                 }
                 searchBar.setText("");
             });
@@ -158,6 +159,31 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
                     localFilterButton.setBackgroundResource(R.drawable.local_filter_button_background);
                 }
             });
+        } else if (itemid.equals("5")) {
+            sortButton.setVisibility(View.VISIBLE);
+            sortButton.setText("Ferry Schedule");
+            sortButton.setOnClickListener(v -> {
+                startActivity(new Intent(Loaditems.this, LoadFerrySchedule.class));
+            });
+        } else if (itemid.equals("1")) {
+            sortButton.setVisibility(View.VISIBLE);
+            sortButton.setText("Top Rated");
+            sortButton.setOnClickListener(v -> {
+                if (sortMode.equals("distance")) {
+                    sortMode = "rating";
+                    sortButton.setText("Sort A - Z");
+                    reSort();
+                } else if (sortMode.equals("rating")) {
+                    sortMode = "name";
+                    sortButton.setText("Sort by Distance");
+                    reSort();
+                } else {
+                    sortMode = "distance";
+                    sortButton.setText("Top Rated");
+                    loadlist("distance");
+                    loading.setText("Sorting by distance .. loading");
+                }
+            });
         }
 
         // Badge counter for badges list
@@ -172,7 +198,7 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
             loadlist("distance");
             loading.setText("Sorting by distance .. loading");
         } else {
-            sortByDistance = false;
+            sortMode = "name";
             loadlist("venue");
             loading.setText("Sorting A to Z .. loading");
         }
@@ -331,16 +357,7 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
             Toast.makeText(this, "Failed to parse venue data", Toast.LENGTH_SHORT).show();
         }
         // Featured listings first, then by current sort order
-        Collections.sort(venues, (a, b) -> {
-            int aAd = a.isAdvertiser.equals("1") ? 0 : 1;
-            int bAd = b.isAdvertiser.equals("1") ? 0 : 1;
-            if (aAd != bAd) return aAd - bAd;
-            if (sortByDistance) {
-                return Double.compare(a.distance, b.distance);
-            } else {
-                return a.getDisplayName().compareToIgnoreCase(b.getDisplayName());
-            }
-        });
+        sortVenues(venues);
         adapter.setVenues(venues);
 
         // Fetch weather for beaches
@@ -377,6 +394,29 @@ public class Loaditems extends AppCompatActivity implements VenueAdapter.OnVenue
                 }
             }
         });
+    }
+
+    private void sortVenues(List<Venue> venues) {
+        Collections.sort(venues, (a, b) -> {
+            int aAd = a.isAdvertiser.equals("1") ? 0 : 1;
+            int bAd = b.isAdvertiser.equals("1") ? 0 : 1;
+            if (aAd != bAd) return aAd - bAd;
+            if (sortMode.equals("rating")) {
+                int cmp = Double.compare(b.avgRating, a.avgRating);
+                if (cmp != 0) return cmp;
+                return Integer.compare(b.totalRatings, a.totalRatings);
+            } else if (sortMode.equals("name")) {
+                return a.getDisplayName().compareToIgnoreCase(b.getDisplayName());
+            } else {
+                return Double.compare(a.distance, b.distance);
+            }
+        });
+    }
+
+    private void reSort() {
+        List<Venue> venues = adapter.getAllVenues();
+        sortVenues(venues);
+        adapter.setVenues(venues);
     }
 
     // --- VenueAdapter.OnVenueClickListener ---

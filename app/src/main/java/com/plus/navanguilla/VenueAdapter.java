@@ -67,6 +67,10 @@ public class VenueAdapter extends RecyclerView.Adapter<VenueAdapter.VenueViewHol
         notifyDataSetChanged();
     }
 
+    public List<Venue> getAllVenues() {
+        return new ArrayList<>(allVenues);
+    }
+
     private boolean localOnly = false;
     private String searchQuery = "";
 

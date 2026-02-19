@@ -69,7 +69,7 @@ public class Myactivity extends AppCompatActivity {
     private ImageView badgeCountIcon;
     private BroadcastReceiver badgeReceiver;
     private View hamburgerOverlay;
-    private boolean esimEnabled = true;
+    private boolean esimEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,13 +130,7 @@ public class Myactivity extends AppCompatActivity {
         Log.i("tagg url", cid + " / " + thiscountry);
         setcountry.setText("Explore " + thiscountry);
 
-        fetchAppSettings();
-
-        try {
-            doGetRequest(justhelper.BASE_URL + "/navigation/loadactivities.php");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        fetchAppSettingsThenLoadMenu();
 
         loadBadgeCount();
 
@@ -665,7 +659,7 @@ public class Myactivity extends AppCompatActivity {
         return locationnow;
     }
 
-    private void fetchAppSettings() {
+    private void fetchAppSettingsThenLoadMenu() {
         Request request = new Request.Builder()
                 .url(justhelper.BASE_URL + "/navigation/load_app_settings.php")
                 .build();
@@ -673,6 +667,8 @@ public class Myactivity extends AppCompatActivity {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e("AppSettings", "Failed to load: " + e.getMessage());
+                // Still load menu even if settings fail
+                loadMenu();
             }
             @Override
             public void onResponse(Call call, Response response) throws IOException {
@@ -683,8 +679,17 @@ public class Myactivity extends AppCompatActivity {
                 } catch (Exception e) {
                     Log.e("AppSettings", "Parse error: " + e.getMessage());
                 }
+                loadMenu();
             }
         });
+    }
+
+    private void loadMenu() {
+        try {
+            doGetRequest(justhelper.BASE_URL + "/navigation/loadactivities.php");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     void doGetRequest(String url) throws IOException {

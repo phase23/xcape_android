@@ -14,7 +14,7 @@ public class justhelper {
     private static final String PROD_FOLDER = "/navigational";
 
     // ── Development settings ──
-    private static final String DEV_DOMAIN = "http://192.168.50.51";
+    private static final String DEV_DOMAIN = "http://192.168.0.171";
     private static final String DEV_FOLDER = "/xcape";
 
     // ── Resolved BASE_URL (used throughout the app) ──
